@@ -1,0 +1,86 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    run: whoami
+  name: whoami
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      run: whoami
+  template:
+    metadata:
+      labels:
+        run: whoami
+    spec:
+      containers:
+      - name: whoami
+        image: nginx:stable
+        ports:
+        - containerPort: 8080
+        command:
+        - '/bin/sh'
+        - '-c'
+        args:
+        - |
+          cat <<'EOF'> /etc/nginx/conf.d/default.conf
+          server_tokens off;
+          server {
+            listen 8080;
+            server_name  _;
+            location / {
+              default_type text/plain;
+              expires -1;
+              return 200 'Client address: $remote_addr $http_x_forwarded_for\nServer address: $server_addr:$server_port\nServer name: $hostname\nDate: $time_local\nURI: $request_uri\nRequest ID: $request_id\n';
+            }
+          }
+          EOF
+          exec nginx -g 'daemon off;'
+
+---        
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    run: whoami
+  name: whoami
+  annotations:
+    # https://www.haproxy.com/documentation/kubernetes/latest/configuration/ingress/
+    haproxy.org/check: "true"
+    haproxy.org/forwarded-for: "true"
+    haproxy.org/load-balance: "roundrobin"
+spec:
+  selector:
+    run: whoami
+  ports:
+  - name: http
+    port: 80
+    protocol: TCP
+    targetPort: 8080
+
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: whoami-ingress
+  namespace: default
+  annotations:
+    haproxy.org/scale-server-slots: "10"
+    haproxy.org/ssl-redirect: "false"
+spec:
+  rules:
+  - host: whoami.test.local
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: whoami
+            port: 
+              number: 80
+  tls:
+  - secretName: tls-secret
+    hosts:
+    - whoami.test.local

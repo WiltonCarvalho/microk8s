@@ -1,0 +1,25 @@
+# tshark -n -T fields -e dns.qry.name -f 'src port 53'
+api.snapcraft.io
+dashboard.snapcraft.io
+login.ubuntu.com
+storage.snapcraftcontent.com:
+canonical-lgw01.cdn.snapcraftcontent.com
+canonical-lcy01.cdn.snapcraftcontent.com
+canonical-lcy02.cdn.snapcraftcontent.com
+canonical-bos01.cdn.snapcraftcontent.com
+cloudfront.cdn.snapcraftcontent.com
+dl.k8s.io
+gcr.io
+get.helm.sh
+github.com
+istio.io	
+k8s.gcr.io
+objects.githubusercontent.com
+production.cloudflare.docker.com
+raw.githubusercontent.com
+auth.docker.io
+registry-1.docker.io
+registry.docker.io
+registry.k8s.io
+storage.googleapis.com
+usage.projectcalico.org
