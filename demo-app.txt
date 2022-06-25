@@ -1,0 +1,29 @@
+curl -fsSL https://start.spring.io/starter.tgz \
+  -d dependencies=web,actuator,prometheus \
+  -d javaVersion=11 \
+  -d packageName=com.example \
+  -d groupId=com.example \
+  -d artifactId=demo-app \
+  -d baseDir=demo-app \
+  -d type=gradle-project | tar -xzvf -
+
+cat <<'EOF'>> demo-app/src/main/resources/application.properties
+server.shutdown=graceful
+management.server.port=8081
+management.endpoints.web.exposure.include=health,info,prometheus
+EOF
+
+docker run -it --rm --name builder \
+  -v $PWD/demo-app:/code \
+  -w /code \
+  openjdk:11-jdk \
+  sh -c './gradlew build -i'
+
+docker run -it --rm --name demo-app \
+  --net=host \
+  -v $PWD/demo-app:/code \
+  -w /code \
+  openjdk:11-jre \
+  java -jar build/libs/demo-app-0.0.1-SNAPSHOT.jar
+
+curl -fsSL localhost:8081/actuator/health
