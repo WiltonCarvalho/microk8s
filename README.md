@@ -400,52 +400,68 @@ kubectl exec my-pod -- df -h /usr/share/nginx/html
 kubectl exec my-pod -- sh -c 'echo ok > /usr/share/nginx/html/index.html'
 ```
 ```
-curl -fsSL $(kubectl get pod my-pod -o wide -o jsonpath='{.status.podIP}')
+POD_IP=$(kubectl get pod my-pod -o wide -o jsonpath='{.status.podIP}')
+curl -fsSL $POD_IP
+kubectl logs pod/my-pod
 ```
 
 ## Persistent Volume - alpine.yaml
 ```
 cat <<'EOF'> alpine.yaml
 ---
-apiVersion: v1
-kind: Pod
+apiVersion: apps/v1
+kind: Deployment
 metadata:
+  labels:
+    app: alpine
   name: alpine
 spec:
-  securityContext:
-    runAsUser: 1000
-    runAsGroup: 0
-    fsGroup: 1000
-  volumes:
-  - name: alpine-vol
-    persistentVolumeClaim:
-      claimName: my-pvc
-  containers:
-  - name: alpine
-    image: alpine:latest
-    #command: [ "sh", "-c", "sleep infinity" ]
-    command:
-    - sh
-    - -c
-    args:
-    - |
-      tail -f /dev/null &
-      pid="$!"
-      echo "[ Started PID $pid ]"
-      trap "echo '[ Stopping PID $pid ]'; kill -TERM $pid && exit 0" SIGINT SIGTERM EXIT
-      wait $pid
-    volumeMounts:
-    - name: alpine-vol
-      mountPath: /mnt
-    securityContext:
-      allowPrivilegeEscalation: false
-    resources:
-      requests:
-        cpu: 128m
-        memory: 32Mi
-      limits:
-        cpu: 128m 
-        memory: 32Mi
+  replicas: 3
+  selector:
+    matchLabels:
+      app: alpine
+  template:
+    metadata:
+      labels:
+        app: alpine
+    spec:
+      securityContext:
+        runAsUser: 1000
+        runAsGroup: 0
+        fsGroup: 1000
+      volumes:
+      - name: alpine-vol
+        persistentVolumeClaim:
+          claimName: my-pvc
+      containers:
+      - name: alpine
+        image: python:3-alpine
+        workingDir: /mnt
+        command:
+        - sh
+        - -c
+        - |
+          ln -sf /proc/self/fd/1 /tmp/stdout.log
+          > /tmp/stdout.log 2>&1
+          python3 -m http.server 8080 &
+          pid="$!"
+          echo "[ Started PID $pid ]"
+          trap "echo '[ Stopping PID $pid ]' && kill -TERM $pid && sleep 3" INT TERM WINCH QUIT
+          wait $pid
+          return_code="$?"
+          exit $return_code
+        volumeMounts:
+        - name: alpine-vol
+          mountPath: /mnt
+        securityContext:
+          allowPrivilegeEscalation: false
+        resources:
+          requests:
+            cpu: 128m
+            memory: 32Mi
+          limits:
+            cpu: 128m
+            memory: 32Mi
 EOF
 ```
 ```
@@ -453,8 +469,20 @@ kubectl apply -f alpine.yaml
 ```
 ```
 kubectl exec alpine -- df -h /mnt
-kubectl exec alpine -- sh -c 'echo ok > /mnt/test.txt'
+
+kubectl exec alpine -- sh -c 'echo test > /mnt/test.txt'
+
 kubectl exec alpine -- ls -lh /mnt
+
+POD_IP0=$(kubectl get pod -l app=alpine -o jsonpath='{.items[0].status.podIP}')
+POD_IP1=$(kubectl get pod -l app=alpine -o jsonpath='{.items[1].status.podIP}')
+POD_IP2=$(kubectl get pod -l app=alpine -o jsonpath='{.items[2].status.podIP}')
+
+curl -fsSL $POD_IP0:8080/test.txt
+curl -fsSL $POD_IP1:8080/test.txt
+curl -fsSL $POD_IP2:8080/test.txt
+
+kubectl logs -l app=alpine
 ```
 
 # Backup and Restore
