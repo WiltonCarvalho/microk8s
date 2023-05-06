@@ -510,6 +510,8 @@ spec:
       labels:
         app: alpine
     spec:
+      securityContext:
+        fsGroup: 1000
       volumes:
       - name: alpine-vol
         persistentVolumeClaim:
