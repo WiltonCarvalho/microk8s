@@ -516,15 +516,17 @@ spec:
           claimName: my-pvc
       affinity:
         podAntiAffinity:
-          # requiredDuringSchedulingIgnoredDuringExecution:
           preferredDuringSchedulingIgnoredDuringExecution:
-          - labelSelector:
-              matchExpressions:
-              - key: app
-                operator: In
-                values:
-                - alpine
-            topologyKey: kubernetes.io/hostname
+          # requiredDuringSchedulingIgnoredDuringExecution:
+          - podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - alpine
+              topologyKey: kubernetes.io/hostname
+            weight: 1
       containers:
       - name: alpine
         image: python:3-alpine
