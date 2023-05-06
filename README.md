@@ -1,15 +1,76 @@
+# Outbound access needed by Microk8s
+```
+tshark -n -T fields -e dns.qry.name -f 'src port 53'
+```
+```
+api.snapcraft.io
+dashboard.snapcraft.io
+login.ubuntu.com
+storage.snapcraftcontent.com
+canonical-lgw01.cdn.snapcraftcontent.com
+canonical-lcy01.cdn.snapcraftcontent.com
+canonical-lcy02.cdn.snapcraftcontent.com
+canonical-bos01.cdn.snapcraftcontent.com
+cloudfront.cdn.snapcraftcontent.com
+dl.k8s.io
+gcr.io
+get.helm.sh
+github.com
+istio.io
+k8s.gcr.io
+objects.githubusercontent.com
+production.cloudflare.docker.com
+raw.githubusercontent.com
+auth.docker.io
+registry-1.docker.io
+registry.docker.io
+registry.k8s.io
+storage.googleapis.com
+usage.projectcalico.org
+```
+
 # Install Microk8s
 ## https://microk8s.io/docs
 ```
 snap install microk8s --classic --channel=1.24/stable
 ```
 ## Add all cluster nodes to /etc/hosts
+```
+cat <<EOF>> /etc/hosts
+
+# K8S cluster nodes
+192.168.122.50 k1
+192.168.122.168 k2
+192.168.122.139 k3
+EOF
+```
 
 ## kubectl and ctr CLI aliases
 ```
 snap alias microk8s.kubectl kubectl
 snap alias microk8s.kubectl k
 snap alias microk8s.ctr ctr
+```
+
+# Install Helm
+```
+microk8s enable helm3
+
+snap alias microk8s.helm3 helm
+
+helm version
+```
+
+# Add extra SANs
+```
+vi /var/snap/microk8s/current/certs/csr.conf.template
+DNS.99 = microk8s.local
+IP.99 = 192.168.122.10
+snap set microk8s dummy="$(date)"
+```
+```
+openssl x509 -text -in /var/snap/microk8s/current/certs/server.crt | \
+  grep -A1 'Subject Alternative Name'
 ```
 
 ## Enable Kubernetes Role Based Access Control
@@ -29,15 +90,6 @@ microk8s enable dns
 ## Enable Cluster Metrics
 ```
 microk8s enable metrics-server
-```
-
-# Install Helm
-```
-microk8s enable helm3
-
-snap alias microk8s.helm3 helm
-
-helm version
 ```
 
 ## Fix PodDisruptionBudget apiVersion
@@ -122,17 +174,24 @@ curl -fsSL localhost:$NODE_PORT
 ## Test Scaling the Deployment
 ```
 kubectl scale deployment httpd --replicas=3
+
+kubectl get pods -o wide
 ```
 
 # Ingress Controller
 ## Optional: Ingress Cert
 ```
-openssl req -x509 -nodes -days 3650 -new -subj "/CN=test.wiltoncarvalho.com" \
+openssl req -x509 -nodes -days 3650 -new -subj "/CN=wiltoncarvalho.com" \
   -newkey rsa:2048 -keyout key.pem -out cert.pem
 ```
 ```
-kubectl create secret tls test-secret \
+kubectl create secret tls ssl-certificate \
   --key key.pem --cert cert.pem --namespace default
+```
+
+## Enable Microk8s default Ingress
+```
+microk8s.enable ingress:default-ssl-certificate=default/ssl-certificate
 ```
 
 ## Enable Microk8s default Ingress
@@ -172,6 +231,7 @@ microk8s enable dashboard
 ```
 
 ## The Admin Token can be used to access the Dashboard
+- https://github.com/kubernetes/dashboard/blob/master/docs/user/access-control/creating-sample-user.md
 ```
 microk8s config | grep token
 ```
@@ -231,6 +291,7 @@ microk8s add-node
 # Troubleshooting
 ## Using cri-tools (crtctl) to manage containers
 ```
+k8s_version=$(kubectl version --short | grep Server | grep -Eo "v[0-9]+\.[0-9]+\.[0-9]*")
 curl -fsSL https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.24.2/crictl-v1.24.2-linux-amd64.tar.gz \
   | sudo tar zxvf - -C "/usr/local/bin"
 ```
@@ -238,7 +299,11 @@ curl -fsSL https://github.com/kubernetes-sigs/cri-tools/releases/download/v1.24.
 crictl --version
 ```
 ```
+cat <<'EOF'>> ~/.bashrc
 export CONTAINER_RUNTIME_ENDPOINT=unix:///var/snap/microk8s/common/run/containerd.sock
+EOF
+
+source ~/.bashrc
 ```
 ```
 crictl pods
@@ -295,7 +360,7 @@ sudo mkdir -p /srv/nfs
 sudo groupadd --gid 60001 anongid
 sudo useradd -s /usr/sbin/nologin -d /nonexistent -g anongid --uid 60001 anonuid
 sudo chown anonuid:anongid /srv/nfs
-sudo chmod 0775 /srv/nfs
+sudo chmod 0770 /srv/nfs
 ```
 
 ## Add the directory to the exports file
@@ -335,7 +400,9 @@ helm repo update
 helm install csi-driver-nfs csi-driver-nfs/csi-driver-nfs \
   --namespace kube-system \
   --set kubeletDir=/var/snap/microk8s/common/var/lib/kubelet \
-  --set driver.mountPermissions=0775
+  --set driver.mountPermissions=0775 \
+  --set controller.runOnControlPlane=true \
+  --set controller.replicas=2
 ```
 ```
 kubectl get csidrivers
@@ -443,20 +510,28 @@ spec:
       labels:
         app: alpine
     spec:
-      securityContext:
-        runAsUser: 1000
-        runAsGroup: 0
-        fsGroup: 1000
       volumes:
       - name: alpine-vol
         persistentVolumeClaim:
           claimName: my-pvc
+      affinity:
+        podAntiAffinity:
+          # requiredDuringSchedulingIgnoredDuringExecution:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - labelSelector:
+              matchExpressions:
+              - key: app
+                operator: In
+                values:
+                - alpine
+            topologyKey: kubernetes.io/hostname
       containers:
       - name: alpine
         image: python:3-alpine
         workingDir: /mnt
         command:
         - sh
+        args:
         - -c
         - |
           ln -sf /proc/self/fd/1 /tmp/stdout.log
@@ -473,6 +548,9 @@ spec:
           mountPath: /mnt
         securityContext:
           allowPrivilegeEscalation: false
+          runAsUser: 1000
+          runAsGroup: 0
+          fsGroup: 1000
         resources:
           requests:
             cpu: 128m
@@ -486,11 +564,13 @@ EOF
 kubectl apply -f alpine.yaml
 ```
 ```
-kubectl exec alpine -- df -h /mnt
+POD_NAME=$(kubectl get pod -l app=alpine -o jsonpath='{.items[0].metadata.name}')
 
-kubectl exec alpine -- sh -c 'echo test > /mnt/test.txt'
+kubectl exec $POD_NAME -- df -h /mnt
 
-kubectl exec alpine -- ls -lh /mnt
+kubectl exec $POD_NAME -- sh -c 'echo test > /mnt/test.txt'
+
+kubectl exec $POD_NAME -- ls -lh /mnt
 
 POD_IP0=$(kubectl get pod -l app=alpine -o jsonpath='{.items[0].status.podIP}')
 POD_IP1=$(kubectl get pod -l app=alpine -o jsonpath='{.items[1].status.podIP}')
@@ -609,4 +689,65 @@ kubectl describe certificate wiltoncarvalho-com
 ## HTTPS APP
 ```
 kubectl apply -f app.yaml
+```
+
+# Api Server Virtual IP
+```
+apt -y install keepalived
+```
+```
+INTERFACE=$(ip route get 1 | awk '{print $5;exit}')
+VIRTUAL_IP="192.168.122.10/24"
+BROADCAST="192.168.122.255"
+```
+```
+cat <<EOF> /etc/keepalived/keepalived.conf
+global_defs {
+  enable_script_security
+  script_user root
+}
+vrrp_script chk_api_server {
+  script       "/usr/bin/curl -fsSL -k https://127.0.0.1:16443/healthz"
+  interval 5
+  weight -20
+}
+vrrp_script chk_ingress {
+  script       "/usr/bin/curl -fsSL http://127.0.0.1:10254/healthz"
+  interval 5
+  weight -20
+}
+vrrp_instance $INTERFACE {
+  interface $INTERFACE
+  virtual_ipaddress {
+    $VIRTUAL_IP brd $BROADCAST scope global dev $INTERFACE
+  }
+## USE UNICAST IF VRRP MULTICAST IS NOT ALLOWED
+#  unicast_src_ip 192.168.122.110
+#  unicast_peer {
+#    192.168.122.33
+#    192.168.122.90
+#  }
+  track_script {
+    chk_api_server
+    chk_ingress
+  }
+  state BACKUP
+  virtual_router_id 70
+  priority 40
+  garp_master_delay 2
+  authentication {
+    auth_type PASS
+    auth_pass essghsad
+  }
+}
+EOF
+```
+
+```
+systemctl restart keepalived
+systemctl enable keepalived
+journalctl -u keepalived -f --no-tail
+```
+```
+ip addr show dev $INTERFACE
 ```
