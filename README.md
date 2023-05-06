@@ -128,8 +128,7 @@ kubectl create secret tls test-secret \
 
 ## Enable Microk8s default Ingress
 ```
-# microk8s.enable ingress:default-ssl-certificate=namespace/secretname
-microk8s enable ingress
+microk8s.enable ingress:default-ssl-certificate=default/test-secret
 ```
 
 ## Set the default ingress backend to the httpd service
