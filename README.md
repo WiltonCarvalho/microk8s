@@ -46,20 +46,45 @@ kubectl apply -f /var/snap/microk8s/current/args/cni-network/cni.yaml
 
 ## Optional: change Calico from VXLAN to BGP Mode
 ```
-kubectl delete -f /var/snap/microk8s/current/args/cni-network/cni.yaml
-```
-```
-microk8s stop && microk8s start
-```
-```
-vi /var/snap/microk8s/current/args/cni-network/cni.yaml
-# change  calico_backend => bird
-# change  CALICO_IPV4POOL_IPIP => CrossSubnet
-# comment CALICO_IPV4POOL_VXLAN
-# add     FELIX_USAGEREPORTINGENABLED => false
-```
-```
+https://microk8s.io/docs/configure-cni
+
+Edit /var/snap/microk8s/current/args/cni-network/cni.yaml
+and change the following sections:
+
+# in configmap/calico-config/data
+# Change "vxlan" to "bird"
+calico_backend: "vxlan"
+
+# in daemonset/calico-node/containers[calico-node]/env
+# Change "CALICO_IPV4POOL_VXLAN" to "CALICO_IPV4POOL_IPIP"
+# Change "Always" to "CrossSubnet"
+- name: CALICO_IPV4POOL_VXLAN
+  value: "Always"
+
+# in daemonset/calico-node/livenessProbe/command
+# Change "-felix-live" to "-bird-live"
+- -felix-live
+
+# in daemonset/calico-node/readinessProbe/command
+# Change "-felix-ready" to "-bird-ready"
+- -felix-ready
+
+change  CALICO_IPV4POOL_IPIP => CrossSubnet
+
+# in daemonset/calico-node/containers[calico-node]/env
+# Add FELIX_USAGEREPORTINGENABLED
+- name: FELIX_USAGEREPORTINGENABLED
+  value: "false"
+
+Then re-apply the Calico manifest.
 kubectl apply -f /var/snap/microk8s/current/args/cni-network/cni.yaml
+
+If Calico has already started and created a default IPPool,
+you might have to delete it with:
+kubectl delete ippools default-ipv4-ippool
+kubectl -n kube-system rollout restart daemonset/calico-node
+
+ps axu | grep bird
 ```
 
 # Test Deployment and Expose as Service NodePort
