@@ -69,8 +69,6 @@ calico_backend: "vxlan"
 # Change "-felix-ready" to "-bird-ready"
 - -felix-ready
 
-change  CALICO_IPV4POOL_IPIP => CrossSubnet
-
 # in daemonset/calico-node/containers[calico-node]/env
 # Add FELIX_USAGEREPORTINGENABLED
 - name: FELIX_USAGEREPORTINGENABLED
