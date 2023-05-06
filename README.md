@@ -31,6 +31,15 @@ microk8s enable dns
 microk8s enable metrics-server
 ```
 
+# Install Helm
+```
+microk8s enable helm3
+
+snap alias microk8s.helm3 helm
+
+helm version
+```
+
 ## Fix PodDisruptionBudget apiVersion
 ```
 grep -B1 PodDisruptionBudget /var/snap/microk8s/current/args/cni-network/cni.yaml \
@@ -153,7 +162,8 @@ kubectl apply -f test-ingress.yaml
 
 ## Connect to the httpd service using the ingress
 ```
-curl localhost
+curl http://localhost
+curl https://localhost -k
 ```
 
 # Enable Cluster Dashboard
@@ -164,12 +174,6 @@ microk8s enable dashboard
 ## The Admin Token can be used to access the Dashboard
 ```
 microk8s config | grep token
-```
-
-## Or use microk8s.dashboard-proxy to setup dashboard login
-```
-microk8s.dashboard-proxy
-CTRL+C
 ```
 
 ## Dashboard Ingress
@@ -222,14 +226,6 @@ curl --resolve dashboard.example.com:443:$NODE_IP -fsSL -k https://dashboard.exa
 ## Add all cluster nodes to /etc/hosts
 ```
 microk8s add-node
-```
-# Install Helm
-```
-microk8s enable helm3
-
-snap alias microk8s.helm3 helm
-
-helm version
 ```
 
 # Troubleshooting
