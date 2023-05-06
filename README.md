@@ -751,3 +751,69 @@ journalctl -u keepalived -f --no-tail
 ```
 ip addr show dev $INTERFACE
 ```
+# Bastion Host - install helm and kubectl
+```
+arch=$(dpkg --print-architecture)
+```
+```
+sudo curl -fsSL https://dl.k8s.io/release/v1.22.1/bin/linux/$arch/kubectl \
+  -o /usr/local/bin/kubectl
+```
+```
+sudo chmod +x /usr/local/bin/kubectl
+```
+```
+curl -fsSL https://get.helm.sh/helm-v3.8.1-linux-$arch.tar.gz | \
+  sudo tar zxvf - -C "/usr/local/bin" linux-$arch/helm --strip-components 1
+```
+
+```
+kubectl version
+helm version
+```
+
+## Bastion Host - get kubeconfig from one of the nodes
+```
+mkdir -p $HOME/.kube
+```
+```
+k8s1_ipaddr="192.168.122.33"
+k8s_apiaddr="https://192.168.122.10:16443"
+```
+```
+ssh ubuntu@$k8s1_ipaddr \
+  "sudo microk8s config | sed 's|server.*|server: $k8s_apiaddr|g'" \
+  | tee $HOME/.kube/config
+```
+```
+chmod 600 $HOME/.kube/config
+```
+## Bastion Host - Test kubectl on the Bastion Host
+```
+kubectl cluster-info
+kubectl get nodes
+```
+
+## Bastion Host - autocomplete to helm and kubectl
+```
+{
+cat <<'EOF'>> ~/.bashrc
+source <(kubectl completion bash)
+source <(helm completion bash)
+alias k=kubectl
+complete -F __start_kubectl k
+EOF
+  source ~/.bashrc
+}
+```
+```
+{
+cat <<'EOF'>> ~/.zshrc
+source <(kubectl completion zsh)
+source <(helm completion zsh)
+alias k=kubectl
+complete -F __start_kubectl k
+EOF
+  source ~/.zshrc
+}
+```
