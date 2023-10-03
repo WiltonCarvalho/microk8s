@@ -308,8 +308,10 @@ source ~/.bashrc
 ```
 crictl pods
 crictl ps -a | grep httpd
-crictl logs --tail=10 fa1245f834da5
-crictl exec -it fa1245f834da5 bash
+crictl logs --tail=10 3a4274ba06842
+crictl exec -it 3a4274ba06842 bash
+runc list | grep 3a4274ba06842
+runc exec -t -u 0 3a4274ba06842f9e8804946d4bbcedf90c4c9e2f7a1c2d7892b51374e335d246 bash
 ```
 ## Using containerd cli (ctr) to manage containers
 ```
